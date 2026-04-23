@@ -1,0 +1,15 @@
+node_modules/
+.env
+youtube-cookies.txt
+package-lock.json
+electro_state.json
+data.db
+cookies.txt
+temp*.out
+*.webm
+*player-script.js
+formats.txt
+formats_utf8.txt
+frontend/dist/
+public/dashboard-react/
+.vscode/

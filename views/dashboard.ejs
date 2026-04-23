@@ -1,0 +1,1190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Dashboard — <%= user.username %></title>
+    <script>
+        // React dashboard is served from /dashboard-react/.
+        // Keep this EJS route for backward compatibility after auth.
+        window.location.replace("/dashboard-react/" + window.location.search);
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://api.fontshare.com/v2/css?f[]=clash-display@400,500,600,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        :root{--bg:#0A0A0F;--surface:#111118;--elevated:#1A1A26;--primary:#8B5CF6;--primary-glow:rgba(139,92,246,0.3);--secondary:#EC4899;--success:#22C55E;--text:#F1F0FF;--muted:#8B8BA7;--border:rgba(255,255,255,0.07);}
+        *{font-family:'DM Sans',sans-serif;box-sizing:border-box;}
+        h1,h2,h3,h4,.display{font-family:'Clash Display',sans-serif;}
+        .mono{font-family:'JetBrains Mono',monospace;}
+        body{background:var(--bg);color:var(--text);overflow:hidden;}
+
+        /* Glass */
+        .glass{background:rgba(255,255,255,0.02);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--border);}
+        .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;transition:all .2s cubic-bezier(.4,0,.2,1);}
+        .card:hover{background:var(--elevated);border-color:rgba(139,92,246,.2);}
+
+        /* Gradient text */
+        .grad{background:linear-gradient(135deg,var(--primary),var(--secondary));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+
+        /* Scrollbar */
+        ::-webkit-scrollbar{width:5px;height:5px;}
+        ::-webkit-scrollbar-track{background:transparent;}
+        ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:10px;}
+        ::-webkit-scrollbar-thumb:hover{background:rgba(139,92,246,.5);}
+        .no-scroll::-webkit-scrollbar{display:none;} .no-scroll{-ms-overflow-style:none;scrollbar-width:none;}
+
+        /* Range inputs */
+        input[type=range]{-webkit-appearance:none;background:rgba(255,255,255,.1);border-radius:4px;height:4px;outline:none;cursor:pointer;}
+        input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:#fff;cursor:pointer;box-shadow:0 0 8px var(--primary-glow);transition:transform .1s;}
+        input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.3);}
+
+        /* Sidebar nav */
+        .nav-link{position:relative;display:flex;align-items:center;padding:10px 16px;border-radius:10px;color:var(--muted);font-weight:500;transition:all .2s;cursor:pointer;text-decoration:none;}
+        .nav-link::before{content:'';position:absolute;left:-16px;top:50%;transform:translateY(-50%);width:3px;height:0;background:var(--primary);border-radius:0 4px 4px 0;transition:height .2s;box-shadow:0 0 8px var(--primary);}
+        .nav-link:hover,.nav-link.active{color:#fff;background:rgba(255,255,255,.04);}
+        .nav-link.active::before{height:100%;top:0;transform:none;}
+        .nav-section-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);padding:8px 16px;margin-top:16px;}
+
+        /* Views */
+        .view{display:none;opacity:0;transform:translateY(8px);transition:all .3s cubic-bezier(.4,0,.2,1);}
+        .view.active{display:block;opacity:1;transform:translateY(0);}
+
+        /* Waveform */
+        .wave-bar{width:4px;background:var(--primary);border-radius:4px;display:inline-block;margin:0 1px;transform-origin:bottom;animation:wave 1s ease-in-out infinite both;}
+        .wave-bar:nth-child(1){height:14px;animation-delay:0s;}
+        .wave-bar:nth-child(2){height:22px;animation-delay:.15s;}
+        .wave-bar:nth-child(3){height:30px;animation-delay:.3s;}
+        .wave-bar:nth-child(4){height:22px;animation-delay:.15s;}
+        .wave-bar:nth-child(5){height:14px;animation-delay:.45s;}
+        .wave-bar.paused{animation-play-state:paused;transform:scaleY(.3);}
+        @keyframes wave{0%,100%{transform:scaleY(.4)}50%{transform:scaleY(1)}}
+
+        /* Progress bar */
+        .prog-wrap{position:relative;height:6px;background:var(--elevated);border-radius:99px;cursor:pointer;}
+        .prog-fill{position:absolute;left:0;top:0;height:100%;background:linear-gradient(90deg,var(--primary),var(--secondary));border-radius:99px;pointer-events:none;transition:width .3s;}
+        .prog-thumb{position:absolute;right:0;top:50%;width:13px;height:13px;background:#fff;border-radius:50%;transform:translate(50%,-50%) scale(0);opacity:0;transition:all .15s;box-shadow:0 0 8px rgba(0,0,0,.5);}
+        .prog-wrap:hover .prog-thumb{opacity:1;transform:translate(50%,-50%) scale(1);}
+
+        /* Toast */
+        .toast{position:fixed;bottom:96px;right:24px;padding:12px 20px;background:rgba(20,20,30,.95);border:1px solid rgba(139,92,246,.3);border-left:4px solid var(--primary);border-radius:10px;color:#fff;font-size:14px;z-index:999;transform:translateX(120%);transition:transform .3s cubic-bezier(.4,0,.2,1);backdrop-filter:blur(10px);min-width:220px;}
+        .toast.show{transform:translateX(0);}
+        .toast.error{border-left-color:#ef4444;border-color:rgba(239,68,68,.3);}
+
+        /* Socket dot */
+        .socket-status{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px;flex-shrink:0;}
+        .socket-status.connected{background:var(--success);box-shadow:0 0 8px var(--success);animation:pulse-dot 2s infinite;}
+        .socket-status.disconnected{background:#ef4444;}
+        @keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.4}}
+
+        /* List rows */
+        .list-row{border-bottom:1px solid rgba(255,255,255,.03);transition:background .15s;}
+        .list-row:hover{background:rgba(255,255,255,.04);}
+        .list-row .row-action{opacity:0;transition:opacity .15s;}
+        .list-row:hover .row-action{opacity:1;}
+
+        /* Control buttons */
+        .ctrl{color:var(--muted);transition:all .2s;background:none;border:none;cursor:pointer;}
+        .ctrl:hover{color:#fff;transform:scale(1.1);}
+
+        .hidden{display:none!important;}
+        .modal-backdrop{background:rgba(0,0,0,.75);backdrop-filter:blur(6px);}
+    </style>
+</head>
+<body style="background:var(--bg);">
+    <div style="display:flex;height:100vh;overflow:hidden;">
+
+        <!-- SIDEBAR -->
+        <aside style="width:240px;flex-shrink:0;display:flex;flex-direction:column;background:var(--bg);border-right:1px solid var(--border);">
+            <!-- Logo -->
+            <div style="padding:24px 20px 20px;border-bottom:1px solid var(--border);">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <div style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;box-shadow:0 0 20px var(--primary-glow);">
+                        <i class="fas fa-music"></i>
+                    </div>
+                    <span class="grad" style="font-size:20px;font-weight:700;font-family:'Clash Display',sans-serif;">MusicBot</span>
+                </div>
+            </div>
+
+            <!-- Nav -->
+            <nav style="flex:1;padding:16px;overflow-y:auto;" class="no-scroll">
+                <div class="nav-section-label">Menu</div>
+                <a href="#" class="nav-link active" data-view="nowplaying" style="margin-bottom:2px;">
+                    <i class="fas fa-headphones-alt" style="width:20px;text-align:center;margin-right:12px;"></i>Now Playing
+                </a>
+                <a href="#" class="nav-link" data-view="queue" style="margin-bottom:2px;">
+                    <i class="fas fa-list-ul" style="width:20px;text-align:center;margin-right:12px;"></i>Queue
+                </a>
+                <a href="#" class="nav-link" data-view="playlists" style="margin-bottom:2px;">
+                    <i class="fas fa-layer-group" style="width:20px;text-align:center;margin-right:12px;"></i>Playlists
+                </a>
+                <a href="#" class="nav-link" data-view="search" style="margin-bottom:2px;">
+                    <i class="fas fa-search" style="width:20px;text-align:center;margin-right:12px;"></i>Search
+                </a>
+                <div class="nav-section-label">Library</div>
+                <a href="#" class="nav-link" data-view="history" style="margin-bottom:2px;">
+                    <i class="fas fa-history" style="width:20px;text-align:center;margin-right:12px;"></i>History
+                </a>
+                <a href="#" class="nav-link" data-view="settings" style="margin-bottom:2px;">
+                    <i class="fas fa-cog" style="width:20px;text-align:center;margin-right:12px;"></i>Settings
+                </a>
+            </nav>
+
+            <!-- Server + User -->
+            <div style="padding:16px;border-top:1px solid var(--border);">
+                <div id="btn-select-server" style="display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px;cursor:pointer;transition:border-color .2s;" onmouseover="this.style.borderColor='rgba(139,92,246,.4)'" onmouseout="this.style.borderColor='var(--border)'">
+                    <div style="width:36px;height:36px;border-radius:8px;background:var(--elevated);display:flex;align-items:center;justify-content:center;color:var(--muted);"><i class="fas fa-server" style="font-size:14px;"></i></div>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Select Server</div>
+                        <div style="display:flex;align-items:center;font-size:11px;color:var(--muted);">
+                            <span class="socket-status disconnected" id="socket-status-dot"></span>
+                            <span id="socket-status">Connecting...</span>
+                        </div>
+                    </div>
+                    <i class="fas fa-chevron-up" style="color:var(--muted);font-size:11px;"></i>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px;margin-top:12px;padding:8px;">
+                    <img src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png"
+                         style="width:34px;height:34px;border-radius:50%;border:2px solid var(--border);"
+                         onerror="this.onerror=null;this.src='https://cdn.discordapp.com/embed/avatars/0.png';">
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><%= user.username %></div>
+                        <div style="font-size:11px;color:var(--muted);">#<%= user.discriminator %></div>
+                    </div>
+                    <a href="/logout" style="color:var(--muted);transition:color .2s;" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='var(--muted)'"><i class="fas fa-sign-out-alt"></i></a>
+                </div>
+            </div>
+        </aside>
+        
+
+        <!-- MAIN -->
+        <main style="flex:1;display:flex;flex-direction:column;background:var(--surface);position:relative;overflow:hidden;">
+            <!-- ambient glows -->
+            <div style="position:absolute;top:-200px;right:-200px;width:600px;height:600px;background:var(--primary);border-radius:50%;filter:blur(150px);opacity:.08;pointer-events:none;"></div>
+            <div style="position:absolute;bottom:-200px;left:-200px;width:500px;height:500px;background:var(--secondary);border-radius:50%;filter:blur(150px);opacity:.08;pointer-events:none;"></div>
+
+            <!-- Header -->
+            <header style="height:64px;padding:0 32px;display:flex;align-items:center;justify-between;border-bottom:1px solid var(--border);flex-shrink:0;position:relative;z-index:10;background:rgba(17,17,24,.8);backdrop-filter:blur(12px);">
+                <div id="header-title">
+                    <h2 style="font-size:22px;font-weight:700;font-family:'Clash Display',sans-serif;color:var(--text);">Now Playing</h2>
+                </div>
+                <div style="display:flex;align-items:center;gap:16px;">
+                    <div style="display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:99px;padding:8px 16px;">
+                        <i class="fas fa-search" style="color:var(--muted);font-size:13px;"></i>
+                        <input id="quick-search" type="text" placeholder="Search... (⌘K)" style="background:none;border:none;outline:none;color:var(--text);font-size:13px;width:180px;" oninput="handleQuickSearch(this.value)">
+                        <kbd style="font-size:10px;background:var(--elevated);color:var(--muted);padding:2px 6px;border-radius:4px;font-family:inherit;">⌘K</kbd>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);">
+                        <span class="socket-status disconnected" id="socket-status-dot2"></span>
+                    </div>
+                    <button id="btn-select-server-hdr" style="display:flex;align-items:center;gap:8px;background:var(--elevated);border:1px solid var(--border);border-radius:10px;padding:8px 14px;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;transition:border-color .2s;" onmouseover="this.style.borderColor='rgba(139,92,246,.5)'" onmouseout="this.style.borderColor='var(--border)'">
+                        <i class="fas fa-server" style="color:var(--primary);"></i> Select Server
+                    </button>
+                </div>
+            </header>
+
+            <!-- Views container -->
+            <div style="flex:1;overflow-y:auto;padding-bottom:96px;" class="no-scroll">
+
+                <!-- NOW PLAYING VIEW -->
+                <div id="view-nowplaying" class="view active" style="padding:32px;max-width:1200px;margin:0 auto;">
+                    <!-- Hero card -->
+                    <div class="glass" style="border-radius:24px;padding:32px;display:flex;gap:40px;align-items:center;margin-bottom:32px;position:relative;overflow:hidden;">
+                        <!-- Album art -->
+                        <div style="flex-shrink:0;position:relative;">
+                            <img id="main-artwork" src="<%= (currentSong && (currentSong.albumArt || currentSong.thumbnail)) || '' %>"
+                                 style="width:280px;height:280px;border-radius:18px;object-fit:cover;background:var(--elevated);box-shadow:0 20px 60px rgba(139,92,246,.25);"
+                                 onerror="this.onerror=null;this.src=window.DASHBOARD_DEFAULT_ART||'';">
+                        </div>
+                        <!-- Info + controls -->
+                        <div style="flex:1;min-width:0;">
+                            <!-- waveform + label -->
+                            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+                                <div id="waveform" style="display:flex;align-items:flex-end;gap:2px;height:30px;">
+                                    <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+                                </div>
+                                <span style="font-size:11px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:.08em;background:rgba(139,92,246,.1);padding:3px 10px;border-radius:99px;border:1px solid rgba(139,92,246,.2);">NOW PLAYING</span>
+                            </div>
+                            <h3 id="main-title" style="font-family:'Clash Display',sans-serif;font-size:36px;font-weight:700;color:var(--text);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><%= (currentSong && currentSong.title) || 'Nothing Playing' %></h3>
+                            <p id="main-artist" style="font-size:18px;color:var(--muted);margin-bottom:28px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><%= (currentSong && currentSong.artist) || 'Queue tracks to get started' %></p>
+                            <!-- Progress -->
+                            <div style="margin-bottom:28px;">
+                                <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                                    <span id="main-current-time" class="mono" style="font-size:12px;color:var(--muted);">0:00</span>
+                                    <span id="main-total-time" class="mono" style="font-size:12px;color:var(--muted);">0:00</span>
+                                </div>
+                                <div class="prog-wrap" id="main-progress-wrap">
+                                    <div class="prog-fill" id="main-progress-fill" style="width:<%= (currentSong && currentSong.duration) ? ((currentSong.currentTime||0)/currentSong.duration*100) : 0 %>%;"><div class="prog-thumb"></div></div>
+                                </div>
+                            </div>
+                            <!-- Controls -->
+                            <div style="display:flex;align-items:center;justify-content:space-between;">
+                                <div style="display:flex;align-items:center;gap:24px;">
+                                    <button class="ctrl btn-shuffle" title="Shuffle" style="font-size:18px;"><i class="fas fa-random" id="main-shuffle"></i></button>
+                                    <button class="ctrl btn-previous" title="Previous" style="font-size:22px;"><i class="fas fa-step-backward"></i></button>
+                                    <button class="btn-play-pause" title="Play/Pause" style="width:62px;height:62px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));border:none;color:#fff;font-size:22px;cursor:pointer;box-shadow:0 0 30px var(--primary-glow);transition:transform .15s,box-shadow .15s;" onmouseover="this.style.transform='scale(1.07)'" onmouseout="this.style.transform='scale(1)'">
+                                        <i class="fas fa-<%= isPlaying ? 'pause' : 'play' %>" id="main-play-icon"></i>
+                                    </button>
+                                    <button class="ctrl btn-skip" title="Next" style="font-size:22px;"><i class="fas fa-step-forward"></i></button>
+                                    <button class="ctrl btn-loop" title="Repeat" style="font-size:18px;"><i class="fas fa-redo" id="main-loop"></i></button>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:10px;width:140px;">
+                                    <i class="fas fa-volume-up" style="color:var(--muted);font-size:14px;"></i>
+                                    <input type="range" id="main-volume" min="0" max="100" value="50" style="flex:1;">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Up Next + Recently Played split -->
+                    <div style="display:grid;grid-template-columns:1fr 340px;gap:24px;">
+                        <!-- Up Next -->
+                        <div>
+                            <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid var(--border);margin-bottom:12px;">
+                                <h4 style="font-family:'Clash Display',sans-serif;font-size:18px;font-weight:700;">Up Next</h4>
+                                <div style="display:flex;align-items:center;gap:12px;">
+                                    <span id="queue-count" style="font-size:12px;color:var(--muted);background:var(--elevated);padding:3px 10px;border-radius:99px;">0 tracks</span>
+                                    <button id="btn-clear-queue" style="font-size:12px;color:#ef4444;background:none;border:none;cursor:pointer;transition:opacity .2s;" onmouseover="this.style.opacity='.7'" onmouseout="this.style.opacity='1'"><i class="fas fa-trash-alt"></i> Clear</button>
+                                </div>
+                            </div>
+                            <div data-queue-container id="queue-list" style="min-height:120px;"></div>
+                        </div>
+                        <!-- Recently Played -->
+                        <div>
+                            <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid var(--border);margin-bottom:12px;">
+                                <h4 style="font-family:'Clash Display',sans-serif;font-size:18px;font-weight:700;">Recently Played</h4>
+                            </div>
+                            <div data-history-container style="min-height:120px;">
+                                <% if (recentlyPlayed && recentlyPlayed.length) { recentlyPlayed.slice(0,6).forEach(function(song){ var s=song||{}; var ago=''; %>
+                                <div class="list-row" style="display:flex;align-items:center;gap:12px;padding:10px 8px;border-radius:10px;">
+                                    <img src="<%= s.albumArt||s.thumbnail||'' %>" style="width:44px;height:44px;border-radius:8px;object-fit:cover;background:var(--elevated);" onerror="this.onerror=null;this.src=window.DASHBOARD_DEFAULT_ART||'';">
+                                    <div style="flex:1;min-width:0;">
+                                        <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><%= s.title||'—' %></div>
+                                        <div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><%= s.artist||'—' %></div>
+                                    </div>
+                                    <div style="font-size:11px;color:var(--muted);white-space:nowrap;"><%= s.playedAt||'' %></div>
+                                </div>
+                                <% }); } %>
+                                <% if (!recentlyPlayed || !recentlyPlayed.length) { %>
+                                <div style="text-align:center;padding:40px;color:var(--muted);"><i class="fas fa-clock" style="font-size:28px;opacity:.3;display:block;margin-bottom:8px;"></i>No history yet</div>
+                                <% } %>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- QUEUE VIEW -->
+                <div id="view-queue" class="view" style="padding:32px;max-width:1200px;margin:0 auto;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
+                        <div><h2 style="font-family:'Clash Display',sans-serif;font-size:28px;font-weight:700;">Queue</h2><p style="color:var(--muted);font-size:14px;margin-top:4px;">Track order management</p></div>
+                        <button id="btn-clear-queue2" style="display:flex;align-items:center;gap:8px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:9px 16px;color:#ef4444;font-size:13px;font-weight:600;cursor:pointer;"><i class="fas fa-trash-alt"></i> Clear Queue</button>
+                    </div>
+                    <div class="card" style="border-radius:16px;overflow:hidden;min-height:400px;">
+                        <div style="display:grid;grid-template-columns:40px 1fr auto auto;gap:12px;padding:12px 20px;border-bottom:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);">
+                            <span>#</span><span>Title / Artist</span><span style="text-align:right;">Time</span><span></span>
+                        </div>
+                        <div data-queue-container id="queue-list-full" style="padding:8px;"></div>
+                    </div>
+                </div>
+
+                <!-- PLAYLISTS VIEW -->
+                <div id="view-playlists" class="view" style="padding:32px;max-width:1200px;margin:0 auto;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;">
+                        <h2 style="font-family:'Clash Display',sans-serif;font-size:28px;font-weight:700;">Playlists</h2>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:20px;">
+                        <div class="card" style="padding:16px;cursor:pointer;border-radius:16px;" data-playlist="electro">
+                            <div style="aspect-ratio:1;background:var(--elevated);border-radius:10px;overflow:hidden;margin-bottom:14px;position:relative;">
+                                <img src="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80" style="width:100%;height:100%;object-fit:cover;">
+                                <div style="position:absolute;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;" class="playlist-overlay">
+                                    <div style="width:44px;height:44px;background:var(--primary);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 0 20px var(--primary-glow);"><i class="fas fa-play"></i></div>
+                                </div>
+                            </div>
+                            <div style="font-weight:700;font-size:15px;margin-bottom:4px;">Electro Mix</div>
+                            <div style="font-size:12px;color:var(--muted);">Electronic & Dance</div>
+                        </div>
+                        <div class="card" style="padding:16px;cursor:pointer;border-radius:16px;" data-playlist="rock">
+                            <div style="aspect-ratio:1;background:var(--elevated);border-radius:10px;overflow:hidden;margin-bottom:14px;position:relative;">
+                                <img src="https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=400&q=80" style="width:100%;height:100%;object-fit:cover;">
+                                <div style="position:absolute;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;" class="playlist-overlay">
+                                    <div style="width:44px;height:44px;background:var(--primary);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 0 20px var(--primary-glow);"><i class="fas fa-play"></i></div>
+                                </div>
+                            </div>
+                            <div style="font-weight:700;font-size:15px;margin-bottom:4px;">Rock Classics</div>
+                            <div style="font-size:12px;color:var(--muted);">Best of Rock</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SEARCH VIEW -->
+                <div id="view-search" class="view" style="padding:40px 32px;max-width:900px;margin:0 auto;">
+                    <h2 style="font-family:'Clash Display',sans-serif;font-size:32px;font-weight:700;text-align:center;margin-bottom:28px;">What do you want to listen to?</h2>
+                    <div style="position:relative;margin-bottom:32px;">
+                        <i class="fas fa-search" style="position:absolute;left:20px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:18px;"></i>
+                        <input type="text" id="search-input" placeholder="Search tracks, artists, playlists..." style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:99px;padding:16px 120px 16px 52px;font-size:15px;color:var(--text);outline:none;transition:border-color .2s;" onfocus="this.style.borderColor='rgba(139,92,246,.5)'" onblur="this.style.borderColor='var(--border)'">
+                        <button id="search-btn" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:var(--primary);border:none;border-radius:99px;padding:10px 20px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;transition:background .2s;" onmouseover="this.style.background='var(--secondary)'" onmouseout="this.style.background='var(--primary)'">Search</button>
+                    </div>
+                    <div id="search-results" style="display:flex;flex-direction:column;gap:6px;"></div>
+                    <div id="search-loading" class="hidden" style="text-align:center;padding:48px;color:var(--primary);"><i class="fas fa-circle-notch fa-spin" style="font-size:36px;margin-bottom:12px;display:block;"></i>Searching...</div>
+                    <div id="search-empty" class="hidden" style="text-align:center;padding:60px;color:var(--muted);"><i class="fas fa-music" style="font-size:36px;opacity:.25;display:block;margin-bottom:12px;"></i>No results found</div>
+                </div>
+
+                <!-- HISTORY VIEW -->
+                <div id="view-history" class="view" style="padding:32px;max-width:1200px;margin:0 auto;">
+                    <h2 style="font-family:'Clash Display',sans-serif;font-size:28px;font-weight:700;margin-bottom:24px;">Listening History</h2>
+                    <div class="card" style="border-radius:16px;overflow:hidden;padding:8px;">
+                        <div data-history-container id="history-full">
+                            <% if (recentlyPlayed && recentlyPlayed.length) { recentlyPlayed.forEach(function(song){ var s=song||{}; %>
+                            <div class="list-row" style="display:flex;align-items:center;gap:14px;padding:12px 12px;border-radius:10px;">
+                                <img src="<%= s.albumArt||s.thumbnail||'' %>" style="width:48px;height:48px;border-radius:8px;object-fit:cover;background:var(--elevated);" onerror="this.onerror=null;this.src=window.DASHBOARD_DEFAULT_ART||'';">
+                                <div style="flex:1;min-width:0;"><div style="font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><%= s.title||'—' %></div><div style="font-size:13px;color:var(--muted);"><%= s.artist||'—' %></div></div>
+                                <div style="font-size:12px;color:var(--muted);white-space:nowrap;"><%= s.playedAt||'' %></div>
+                            </div>
+                            <% }); } %>
+                            <% if (!recentlyPlayed || !recentlyPlayed.length) { %><div style="text-align:center;padding:60px;color:var(--muted);"><i class="fas fa-history" style="font-size:32px;opacity:.2;display:block;margin-bottom:12px;"></i>No history yet</div><% } %>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SETTINGS VIEW -->
+                <div id="view-settings" class="view" style="padding:32px;max-width:800px;margin:0 auto;">
+                    <h2 style="font-family:'Clash Display',sans-serif;font-size:28px;font-weight:700;margin-bottom:28px;">Settings</h2>
+                    <div class="card" style="border-radius:16px;padding:32px;">
+                        <div style="margin-bottom:24px;padding-bottom:24px;border-bottom:1px solid var(--border);">
+                            <div style="font-size:16px;font-weight:700;font-family:'Clash Display',sans-serif;margin-bottom:16px;color:var(--text);">Bot Settings</div>
+                            <label style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.04);">
+                                <div><div style="font-size:14px;font-weight:600;color:var(--text);">Auto-Play</div><div style="font-size:12px;color:var(--muted);">Continue playing similar tracks when queue ends</div></div>
+                                <div style="position:relative;width:44px;height:24px;">
+                                    <input type="checkbox" id="toggle-autoplay" <%= autoplayEnabled ? "checked" : "" %> style="opacity:0;position:absolute;">
+                                    <div style="width:44px;height:24px;background:<%= autoplayEnabled ? "var(--primary)" : "var(--elevated)" %>;border-radius:99px;cursor:pointer;border:1px solid var(--border);<%= autoplayEnabled ? "box-shadow:0 0 10px var(--primary-glow);" : "" %>"></div>
+                                </div>
+                            </label>
+
+                            <div style="display:flex;flex-direction:column;gap:10px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.04);">
+                                <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+                                    <div>
+                                        <div style="font-size:13px;font-weight:600;color:var(--text);">Autoplay Mode</div>
+                                        <div style="font-size:12px;color:var(--muted);">How recommendations are selected</div>
+                                    </div>
+                                    <select id="autoplay-mode" style="background:var(--elevated);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:8px 10px;">
+                                        <option value="smart" <%= autoplaySettings?.mode === "smart" ? "selected" : "" %>>smart</option>
+                                        <option value="similar_artist" <%= autoplaySettings?.mode === "similar_artist" ? "selected" : "" %>>similar_artist</option>
+                                        <option value="same_genre" <%= autoplaySettings?.mode === "same_genre" ? "selected" : "" %>>same_genre</option>
+                                        <option value="random" <%= autoplaySettings?.mode === "random" ? "selected" : "" %>>random</option>
+                                    </select>
+                                </div>
+
+                                <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+                                    <div>
+                                        <div style="font-size:13px;font-weight:600;color:var(--text);">Exploration Rate</div>
+                                        <div style="font-size:12px;color:var(--muted);">Try new artists (%)</div>
+                                    </div>
+                                    <div style="display:flex;align-items:center;gap:12px;">
+                                        <input id="autoplay-exploration" type="range" min="0" max="100" value="<%= autoplaySettings?.exploration_rate ?? 20 %>" style="width:160px;">
+                                        <span id="autoplay-exploration-val" class="mono" style="font-size:12px;color:var(--muted);"><%= autoplaySettings?.exploration_rate ?? 20 %>%</span>
+                                    </div>
+                                </div>
+
+                                <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+                                    <div>
+                                        <div style="font-size:13px;font-weight:600;color:var(--text);">Block Explicit</div>
+                                        <div style="font-size:12px;color:var(--muted);">Skip tracks that look explicit</div>
+                                    </div>
+                                    <div>
+                                        <input type="checkbox" id="autoplay-block-explicit" <%= autoplaySettings?.block_explicit ? "checked" : "" %> style="transform:scale(1.1);">
+                                    </div>
+                                </div>
+
+                                <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+                                    <div>
+                                        <div style="font-size:13px;font-weight:600;color:var(--text);">Preferred Sources</div>
+                                        <div style="font-size:12px;color:var(--muted);">Engine uses YouTube for now</div>
+                                    </div>
+                                    <select id="autoplay-sources" style="background:var(--elevated);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:8px 10px;">
+                                        <option value="youtube" <%= autoplaySettings?.preferred_sources === "youtube" ? "selected" : "" %>>youtube</option>
+                                        <option value="soundcloud" <%= autoplaySettings?.preferred_sources === "soundcloud" ? "selected" : "" %>>soundcloud</option>
+                                        <option value="both" <%= (!autoplaySettings?.preferred_sources || autoplaySettings?.preferred_sources === "both") ? "selected" : "" %>>both</option>
+                                    </select>
+                                </div>
+
+                                <button id="btn-apply-autoplay-settings" style="margin-top:2px;background:linear-gradient(135deg,var(--primary),var(--secondary));border:none;border-radius:12px;padding:10px 16px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 0 20px var(--primary-glow);">
+                                    Apply Autoplay Settings
+                                </button>
+                            </div>
+                            <label style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;">
+                                <div><div style="font-size:14px;font-weight:600;color:var(--text);">Auto-Disconnect</div><div style="font-size:12px;color:var(--muted);">Leave voice channel when empty</div></div>
+                                <div style="position:relative;width:44px;height:24px;"><input type="checkbox" id="toggle-autodisconnect" checked style="opacity:0;position:absolute;"><div style="width:44px;height:24px;background:var(--primary);border-radius:99px;cursor:pointer;box-shadow:0 0 10px var(--primary-glow);"></div></div>
+                            </label>
+                        </div>
+                        <div>
+                            <div style="font-size:14px;font-weight:700;color:#ef4444;margin-bottom:12px;">Danger Zone</div>
+                            <button style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:10px 20px;color:#ef4444;font-size:13px;font-weight:600;cursor:pointer;">Reset All Settings</button>
+                        </div>
+                    </div>
+                </div>
+
+            </div><!-- end views -->
+        </main>
+    </div><!-- end flex wrapper -->
+
+
+    <!-- FIXED BOTTOM PLAYER BAR -->
+    <div style="position:fixed;bottom:0;left:240px;right:0;height:88px;background:rgba(10,10,15,.9);border-top:1px solid var(--border);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);display:flex;align-items:center;padding:0 28px;gap:20px;z-index:100;">
+        <!-- Left: track info -->
+        <div style="display:flex;align-items:center;gap:14px;width:240px;flex-shrink:0;">
+            <img id="bar-artwork" src="" style="width:52px;height:52px;border-radius:10px;object-fit:cover;background:var(--elevated);" onerror="this.onerror=null;this.src=window.DASHBOARD_DEFAULT_ART||'';">
+            <div style="min-width:0;">
+                <div id="bar-title" style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">—</div>
+                <div id="bar-artist" style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">—</div>
+            </div>
+            <button style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;flex-shrink:0;transition:color .2s;" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='var(--muted)'"><i class="far fa-heart"></i></button>
+        </div>
+        <!-- Center: controls + progress -->
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;">
+            <div style="display:flex;align-items:center;gap:20px;">
+                <button class="ctrl bar-shuffle" title="Shuffle" style="font-size:14px;"><i class="fas fa-random" id="bar-shuffle"></i></button>
+                <button class="ctrl bar-previous" title="Previous" style="font-size:18px;"><i class="fas fa-step-backward"></i></button>
+                <button class="bar-play-pause" style="width:40px;height:40px;border-radius:50%;background:#fff;border:none;color:#0A0A0F;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .15s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+                    <i class="fas fa-<%= isPlaying ? 'pause' : 'play' %>" id="bar-play-icon"></i>
+                </button>
+                <button class="ctrl bar-skip" title="Next" style="font-size:18px;"><i class="fas fa-step-forward"></i></button>
+                <button class="ctrl bar-loop" title="Loop" style="font-size:14px;"><i class="fas fa-redo" id="bar-loop"></i></button>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;width:100%;max-width:520px;">
+                <span id="bar-current-time" class="mono" style="font-size:11px;color:var(--muted);width:34px;text-align:right;"><%= (currentSong && typeof currentSong.currentTime==='number') ? (Math.floor(currentSong.currentTime/60)+':'+(currentSong.currentTime%60).toString().padStart(2,'0')) : '0:00' %></span>
+                <div style="flex:1;position:relative;">
+                    <input type="range" id="bar-progress" min="0" max="<%= (currentSong && currentSong.duration) ? currentSong.duration : 1 %>" value="<%= (currentSong && typeof currentSong.currentTime==='number') ? currentSong.currentTime : 0 %>" style="width:100%;">
+                </div>
+                <span id="bar-total-time" class="mono" style="font-size:11px;color:var(--muted);width:34px;"><%= (currentSong && currentSong.duration) ? (Math.floor(currentSong.duration/60)+':'+(currentSong.duration%60).toString().padStart(2,'0')) : '0:00' %></span>
+            </div>
+        </div>
+        <!-- Right: volume -->
+        <div style="display:flex;align-items:center;gap:10px;width:160px;flex-shrink:0;">
+            <i class="fas fa-volume-up" style="color:var(--muted);font-size:13px;"></i>
+            <input type="range" id="bar-volume" min="0" max="100" value="<%= volume %>" style="flex:1;">
+            <span id="bar-volume-value" class="mono" style="font-size:11px;color:var(--muted);width:28px;"><%= volume %>%</span>
+        </div>
+    </div>
+
+    <!-- MODAL: Select Server -->
+    <div id="modal-select-server" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);z-index:200;display:none;align-items:center;justify-content:center;">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:20px;width:100%;max-width:420px;box-shadow:0 30px 80px rgba(0,0,0,.5);overflow:hidden;">
+            <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:var(--elevated);">
+                <span style="font-family:'Clash Display',sans-serif;font-size:18px;font-weight:700;">Select Server</span>
+                <button type="button" id="modal-close" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;transition:color .2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--muted)'"><i class="fas fa-times"></i></button>
+            </div>
+            <div style="padding:12px;max-height:360px;overflow-y:auto;">
+                <ul id="modal-guild-list" style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:4px;"></ul>
+                <p id="modal-guild-empty" class="hidden" style="text-align:center;padding:32px;color:var(--muted);">No mutual servers found.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Playlist Tracks -->
+    <div id="modal-playlist" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);z-index:200;display:none;align-items:center;justify-content:center;padding:20px;">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:20px;width:100%;max-width:640px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.5);">
+            <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:var(--elevated);flex-shrink:0;">
+                <span class="display" style="font-size:20px;font-weight:700;" id="modal-playlist-title">Playlist</span>
+                <button type="button" id="modal-playlist-close" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;"><i class="fas fa-times"></i></button>
+            </div>
+            <div style="padding:16px;border-bottom:1px solid var(--border);flex-shrink:0;">
+                <button type="button" id="modal-playlist-play-all" style="width:100%;padding:12px;background:linear-gradient(135deg,var(--primary),var(--secondary));border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 0 20px var(--primary-glow);"><i class="fas fa-play" style="margin-right:8px;"></i>Play All</button>
+            </div>
+            <div id="modal-playlist-tracks" style="padding:12px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:4px;"></div>
+        </div>
+    </div>
+
+    <!-- TOAST -->
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script>
+        window.DASHBOARD_GUILD_ID = '<%= typeof selectedGuild !== "undefined" ? selectedGuild : "" %>';
+        window.DASHBOARD_DEFAULT_ART = 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=400&auto=format&fit=crop';
+    </script>
+    <script>
+        (function() {
+            'use strict';
+            var STORAGE_KEY = 'dashboard_lastGuildId';
+            
+            console.log('═══════════════════════════════════════');
+            console.log('🔌 Initializing Socket.io connection...');
+            console.log('   Target: http://localhost:3000');
+            console.log('   Transport: websocket');
+            console.log('═══════════════════════════════════════');
+            
+            var socket = typeof io !== 'undefined' ? io('http://localhost:3000', {
+                transports: ['websocket'],
+                withCredentials: true,
+                reconnection: true,
+                reconnectionDelay: 2000,
+                reconnectionDelayMax: 5000,
+                reconnectionAttempts: 30,
+                timeout: 10000
+            }) : null;
+            
+            if (!socket) {
+                console.error('❌ Socket.io library not loaded!');
+                var statusEl = document.getElementById('socket-status');
+                if (statusEl) statusEl.innerText = 'Socket.io failed to load';
+                return;
+            }
+            console.log('✅ Socket.io client initialized');
+
+            var params = new URLSearchParams(window.location.search);
+            var guildId = params.get('guild_id') || params.get('guild') || (typeof window.DASHBOARD_GUILD_ID !== 'undefined' ? window.DASHBOARD_GUILD_ID : '') || (typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null) || '';
+            guildId = (guildId && String(guildId).trim()) || '';
+            if (guildId && typeof localStorage !== 'undefined') try { localStorage.setItem(STORAGE_KEY, guildId); } catch (e) {}
+
+            function setSocketStatus(connected, text) {
+                var dots = document.querySelectorAll('.socket-status');
+                dots.forEach(function(dot) {
+                    dot.className = 'socket-status ' + (connected ? 'connected' : 'disconnected');
+                });
+                var txt = document.getElementById('socket-status');
+                if (txt) txt.innerText = text != null ? text : (connected ? 'Connected' : 'Disconnected');
+            }
+
+            function joinGuildAndRequestState() {
+                if (!guildId) return;
+                socket.emit('join-guild', guildId);
+                if (typeof console !== 'undefined' && console.log) console.log('Joining guild:', guildId);
+            }
+
+            socket.on('connect', function() {
+                console.log('═══════════════════════════════════════');
+                console.log('✅ Socket CONNECTED!');
+                console.log('   Socket ID:', socket.id);
+                console.log('   Guild ID:', guildId || 'NONE');
+                console.log('═══════════════════════════════════════');
+                setSocketStatus(true, 'Connected');
+                
+                if (guildId) {
+                    joinGuildAndRequestState();
+                } else {
+                    console.warn('⚠️ No guild ID — forcing Select Server modal');
+                    setTimeout(function() {
+                        var modal = document.getElementById('modal-select-server');
+                        var btn = document.getElementById('btn-select-server');
+                        if (modal) {
+                            modal.classList.remove('hidden');
+                            console.log('✅ Opened Select Server modal');
+                        } else if (btn) {
+                            btn.click();
+                            console.log('✅ Clicked Select Server button');
+                        }
+                    }, 100);
+                }
+            });
+
+            socket.on('disconnect', function(reason) {
+                console.warn('🔴 Socket disconnected. Reason:', reason);
+                setSocketStatus(false, 'Disconnected');
+                showToast('Disconnected. Reconnecting...', false);
+            });
+
+            socket.on('connect_error', function(err) {
+                console.error('═══════════════════════════════════════');
+                console.error('❌ Socket Connection Error');
+                console.dir(err);
+                console.error('Error message:', err.message);
+                console.error('Error type:', err.type || 'unknown');
+                console.error('Error data:', err.data || 'none');
+                console.error('Error description:', err.description || 'none');
+                console.error('Stack:', err.stack || 'no stack');
+                console.error('═══════════════════════════════════════');
+                setSocketStatus(false, 'Error: ' + err.message);
+                var statusEl = document.getElementById('socket-status');
+                if (statusEl) statusEl.innerText = 'Error: ' + err.message;
+                showToast('Connection error: ' + err.message, true);
+            });
+
+            socket.on('reconnect_attempt', function(attemptNumber) {
+                console.log('🔄 Reconnection attempt', attemptNumber);
+            });
+
+            socket.on('reconnect', function(attemptNumber) {
+                console.log('✅ Reconnected after', attemptNumber, 'attempts');
+                setSocketStatus(true, 'Reconnected');
+            });
+
+            socket.on('reconnect_failed', function() {
+                console.error('❌ Reconnection failed');
+                setSocketStatus(false, 'Connection failed');
+                showToast('Unable to connect to server', true);
+            });
+
+            function fmtTime(sec) {
+                sec = Math.floor(Number(sec) || 0);
+                var m = Math.floor(sec / 60);
+                var s = sec % 60;
+                return m + ':' + (s < 10 ? '0' : '') + s;
+            }
+
+            function showToast(msg, isError) {
+                var el = document.getElementById('toast');
+                if (!el) return;
+                el.textContent = msg || '';
+                el.classList.toggle('error', !!isError);
+                el.classList.add('show');
+                clearTimeout(window._toastTimer);
+                window._toastTimer = setTimeout(function() { el.classList.remove('show'); }, 3000);
+            }
+            function handleResponse(res) {
+                if (res && res.error) showToast(res.error, true);
+            }
+
+            // Dashboard: show predicted next track (smart autoplay)
+            socket.on('autoplay:next-predicted', function(data) {
+                try {
+                    if (!data || !data.prediction) return;
+                    var p = data.prediction;
+                    var title = p.title || 'Unknown';
+                    var artist = p.artist || '';
+                    showToast('Next suggested: ' + title + (artist ? ' - ' + artist : ''), false);
+                } catch (e) {}
+            });
+
+            // Live progress state for ticker
+            var progressState = { currentTime: 0, duration: 0, isPlaying: false, trackStartMs: 0 };
+            var progressIntervalId = null;
+            function stopProgressTicker() {
+                if (progressIntervalId) { clearInterval(progressIntervalId); progressIntervalId = null; }
+            }
+            function updateProgressUI(cur, dur) {
+                var c = Number(cur);
+                var d = Number(dur);
+                if (isNaN(c)) c = 0;
+                if (isNaN(d) || d <= 0) d = 1;
+                var leftLbl = fmtTime(c);
+                var rightLbl = fmtTime(d);
+                var el;
+                if ((el = document.getElementById('main-current-time'))) el.innerText = leftLbl;
+                if ((el = document.getElementById('bar-current-time'))) el.innerText = leftLbl;
+                if ((el = document.getElementById('main-total-time'))) el.innerText = rightLbl;
+                if ((el = document.getElementById('bar-total-time'))) el.innerText = rightLbl;
+                var bar = document.getElementById('bar-progress');
+                if (bar) { bar.max = d; bar.value = Math.max(0, Math.min(c, d)); }
+                if ((el = document.getElementById('main-progress-fill'))) el.style.width = (d ? (c / d * 100) : 0) + '%';
+            }
+            function tickProgress() {
+                if (!progressState.isPlaying || !progressState.duration) return;
+                var elapsed = (Date.now() - progressState.trackStartMs) / 1000;
+                var cur = Math.min(progressState.currentTime + elapsed, progressState.duration);
+                progressState.currentTime = cur;
+                updateProgressUI(cur, progressState.duration);
+            }
+            function resetProgressBar() {
+                stopProgressTicker();
+                progressState.currentTime = 0;
+                progressState.duration = 0;
+                progressState.isPlaying = false;
+                progressState.trackStartMs = 0;
+                updateProgressUI(0, 0);
+            }
+
+            // 7. player:update — update UI (wrapped in try/catch so one error doesn't kill the script)
+            socket.on('player:update', function(data) {
+                try {
+                    if (!data) return;
+                    var track = data.currentTrack || null;
+                    var isPlaying = !!data.isPlaying;
+                    var vol = typeof data.volume === 'number' ? data.volume : 50;
+                    var dur = (track && (typeof track.duration === 'number')) ? track.duration : 0;
+                    var cur = (track && (typeof track.currentTime === 'number')) ? track.currentTime : 0;
+                    var defArt = window.DASHBOARD_DEFAULT_ART || '';
+
+                    if (track) {
+                        progressState.currentTime = cur;
+                        progressState.duration = Math.max(0, dur);
+                        progressState.isPlaying = isPlaying;
+                        progressState.trackStartMs = Date.now();
+                        stopProgressTicker();
+                        if (isPlaying && dur > 0) progressIntervalId = setInterval(tickProgress, 1000);
+
+                        var el;
+                        var art = track.albumArt || track.thumbnail || defArt;
+                        var title = track.title || '—';
+                        var artist = track.artist || track.author || '—';
+                        if ((el = document.getElementById('main-artwork'))) { el.src = art || el.src; }
+                        if ((el = document.getElementById('bar-artwork'))) { el.src = art || el.src; }
+                        if ((el = document.getElementById('main-title'))) el.innerText = title;
+                        if ((el = document.getElementById('bar-title'))) el.innerText = title;
+                        if ((el = document.getElementById('main-artist'))) el.innerText = artist;
+                        if ((el = document.getElementById('bar-artist'))) el.innerText = artist;
+                        updateProgressUI(cur, dur);
+                        var progressBar = document.getElementById('bar-progress');
+                        if (progressBar) {
+                            progressBar.max = dur > 0 ? dur : 1;
+                            progressBar.value = Math.max(0, Math.min(cur, dur || 1));
+                        }
+                    } else {
+                        resetProgressBar();
+                    }
+
+                    progressState.isPlaying = isPlaying;
+                    if (!isPlaying) stopProgressTicker();
+                    var mainIcon = document.getElementById('main-play-icon');
+                    var barIcon = document.getElementById('bar-play-icon');
+                    var icon = isPlaying ? 'pause' : 'play';
+                    if (mainIcon) mainIcon.className = 'fas fa-' + icon;
+                    if (barIcon) barIcon.className = 'fas fa-' + icon;
+
+                    if (typeof data.isShuffled !== 'undefined') {
+                        var shuffleClass = data.isShuffled ? 'accent-purple' : 'text-gray-300';
+                        document.querySelectorAll('#main-shuffle, #bar-shuffle').forEach(function(el) {
+                            if (el) el.className = 'fas fa-random ' + shuffleClass;
+                        });
+                    }
+                    if (typeof data.loopMode !== 'undefined') {
+                        var loopActive = data.loopMode === 1 || data.loopMode === 2 || data.loopMode === 3;
+                        var loopClass = loopActive ? 'accent-purple' : 'text-gray-300';
+                        document.querySelectorAll('#main-loop, #bar-loop').forEach(function(el) {
+                            if (el) el.className = 'fas fa-redo ' + loopClass;
+                        });
+                    }
+                    if ((el = document.getElementById('bar-volume-value'))) el.innerText = vol + '%';
+                    if ((el = document.getElementById('bar-volume'))) el.value = vol;
+
+                    if (Array.isArray(data.queue)) {
+                        var upNext = document.querySelector('[data-queue-container]');
+                        var countEl = document.getElementById('queue-count');
+                        if (countEl) countEl.innerText = data.queue.length + ' tracks';
+                        if (upNext) {
+                            if (data.queue.length === 0) {
+                                upNext.innerHTML = '<div class="text-center py-12 text-gray-500"><i class="fas fa-music text-4xl mb-4 opacity-30"></i><p>No songs in queue</p></div>';
+                            } else {
+                                upNext.innerHTML = data.queue.map(function(t, i) {
+                                    var artUrl = (t && (t.albumArt || t.thumbnail)) || defArt;
+                                    return '<div class="queue-item flex items-center gap-4 p-3 rounded-lg transition">' +
+                                        '<span class="text-gray-500 font-medium w-6">' + (i + 1) + '</span>' +
+                                        '<img src="' + artUrl + '" class="w-12 h-12 rounded object-cover" alt="" onerror="this.onerror=null;this.src=window.DASHBOARD_DEFAULT_ART||\'\';">' +
+                                        '<div class="flex-1 min-w-0"><p class="font-medium truncate">' + ((t && t.title) || '—') + '</p><p class="text-sm text-gray-400 truncate">' + ((t && t.artist) || '—') + '</p></div>' +
+                                        '<div class="text-right"><p class="text-sm text-gray-400">' + fmtTime((t && t.duration) || 0) + '</p><p class="text-xs text-gray-500">' + ((t && t.requestedBy) || '') + '</p></div>' +
+                                        '<button type="button" class="queue-remove-btn text-gray-400 hover:text-red-500 transition" data-queue-index="' + i + '" title="Remove"><i class="fas fa-times"></i></button>' +
+                                        '</div>';
+                                }).join('');
+                            }
+                        }
+                    }
+                    if (Array.isArray(data.history)) {
+                        var histHtml = data.history.slice(0, 10).map(function(h) {
+                            var ago = 'recently';
+                            if (h && h.playedAt) {
+                                var d = new Date(h.playedAt);
+                                var secs = Math.floor((new Date() - d) / 1000);
+                                if (secs < 60) ago = 'just now';
+                                else if (secs < 3600) ago = Math.floor(secs / 60) + ' min ago';
+                                else ago = Math.floor(secs / 3600) + ' hr ago';
+                            }
+                            var artUrl = (h && (h.albumArt || h.thumbnail)) || defArt;
+                            return '<div class="queue-item flex items-center gap-4 p-3 rounded-lg transition">' +
+                                '<img src="' + artUrl + '" class="w-14 h-14 rounded object-cover" alt="" onerror="this.onerror=null;this.src=window.DASHBOARD_DEFAULT_ART||\'\';">' +
+                                '<div class="flex-1 min-w-0"><p class="font-medium truncate">' + ((h && h.title) || '—') + '</p><p class="text-sm text-gray-400 truncate">' + ((h && h.artist) || '—') + '</p></div>' +
+                                '<div class="text-right"><p class="text-xs text-gray-500">' + ago + '</p></div></div>';
+                        }).join('');
+                        document.querySelectorAll('[data-history-container]').forEach(function(container) {
+                            if (container) container.innerHTML = histHtml || '<div class="text-center py-8 text-gray-500">No recently played tracks</div>';
+                        });
+                    }
+                } catch (err) {
+                    console.error('player:update handler error', err);
+                }
+            });
+
+            // 4 & 5. Select elements and add event listeners (after DOM ready)
+            document.addEventListener('DOMContentLoaded', function() {
+                var defArt = window.DASHBOARD_DEFAULT_ART;
+                if (defArt) {
+                    ['main-artwork', 'bar-artwork'].forEach(function(id) {
+                        var el = document.getElementById(id);
+                        if (el && (!el.src || el.src === '' || el.getAttribute('src') === '')) el.src = defArt;
+                    });
+                }
+                // --- NEW: View switching ---
+                function switchView(viewName) {
+                    document.querySelectorAll('.view').forEach(function(v) { v.classList.remove('active'); });
+                    document.querySelectorAll('.nav-link').forEach(function(l) { l.classList.remove('active'); });
+                    var target = document.getElementById('view-' + viewName);
+                    if (target) target.classList.add('active');
+                    document.querySelectorAll('.nav-link[data-view="' + viewName + '"]').forEach(function(l) { l.classList.add('active'); });
+                    var headerTitle = document.getElementById('header-title');
+                    var titles = {nowplaying:'Now Playing',queue:'Queue',playlists:'Playlists',search:'Search',history:'History',settings:'Settings'};
+                    if (headerTitle) headerTitle.querySelector('h2').innerText = titles[viewName] || '';
+                }
+                document.querySelectorAll('.nav-link[data-view]').forEach(function(link) {
+                    link.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        switchView(this.getAttribute('data-view'));
+                    });
+                });
+
+                // Modal open from sidebar + header buttons
+                function openServerModal() {
+                    var modal = document.getElementById('modal-select-server');
+                    if (modal) { modal.classList.remove('hidden'); modal.style.display = 'flex'; }
+                }
+                var sidebarBtn = document.getElementById('btn-select-server');
+                var hdrBtn = document.getElementById('btn-select-server-hdr');
+                if (sidebarBtn) sidebarBtn.addEventListener('click', openServerModal);
+                if (hdrBtn) hdrBtn.addEventListener('click', openServerModal);
+                var modalClose = document.getElementById('modal-close');
+                if (modalClose) modalClose.addEventListener('click', function() {
+                    var modal = document.getElementById('modal-select-server');
+                    if (modal) { modal.classList.add('hidden'); modal.style.display = 'none'; }
+                });
+
+                // Quick search (header) switches to search view
+                window.handleQuickSearch = function(val) {
+                    if (val.length > 0) {
+                        switchView('search');
+                        var si = document.getElementById('search-input');
+                        if (si) si.value = val;
+                    }
+                };
+
+                // Playlist card overlays
+                document.querySelectorAll('[data-playlist]').forEach(function(card) {
+                    var overlay = card.querySelector('.playlist-overlay');
+                    if (!overlay) return;
+                    card.addEventListener('mouseenter', function() { overlay.style.opacity = '1'; });
+                    card.addEventListener('mouseleave', function() { overlay.style.opacity = '0'; });
+                });
+
+                // Clear queue buttons
+                ['btn-clear-queue','btn-clear-queue2'].forEach(function(id) {
+                    var btn = document.getElementById(id);
+                    if (btn) btn.addEventListener('click', function() { emitWithGuild('player:clear', {}); });
+                });
+
+                // Main progress bar — click to seek
+                var mainWrap = document.getElementById('main-progress-wrap');
+                if (mainWrap) {
+                    mainWrap.addEventListener('click', function(e) {
+                        var rect = mainWrap.getBoundingClientRect();
+                        var pct = (e.clientX - rect.left) / rect.width;
+                        var dur = progressState.duration || 0;
+                        if (dur > 0) emitWithGuild('player:seek', { position: Math.floor(pct * dur) });
+                    });
+                }
+
+                var playPauseButtons = document.querySelectorAll('.btn-play-pause, .bar-play-pause');
+
+                var skipButtons = document.querySelectorAll('.btn-skip, .bar-skip');
+                var previousButtons = document.querySelectorAll('.btn-previous, .bar-previous');
+                var shuffleButtons = document.querySelectorAll('.btn-shuffle, .bar-shuffle');
+                var loopButtons = document.querySelectorAll('.btn-loop, .bar-loop');
+                var volumeSlider = document.getElementById('bar-volume');
+
+                function emitWithGuild(evt, payload, cb) {
+                    if (!guildId) { if (cb) cb({ error: 'No guild selected' }); return; }
+                    socket.emit(evt, typeof payload === 'object' ? Object.assign({}, payload, { guildId: guildId }) : { guildId: guildId }, cb || handleResponse);
+                }
+
+                // Smart autoplay settings controls (dashboard Settings view)
+                var explorationSlider = document.getElementById('autoplay-exploration');
+                var explorationVal = document.getElementById('autoplay-exploration-val');
+                if (explorationSlider && explorationVal) {
+                    explorationSlider.addEventListener('input', function() {
+                        var v = parseInt(this.value, 10);
+                        if (isNaN(v)) v = 0;
+                        explorationVal.innerText = v + '%';
+                    });
+                }
+
+                var applyAutoplayBtn = document.getElementById('btn-apply-autoplay-settings');
+                if (applyAutoplayBtn) {
+                    applyAutoplayBtn.addEventListener('click', function() {
+                        var enabledEl = document.getElementById('toggle-autoplay');
+                        var modeEl = document.getElementById('autoplay-mode');
+                        var blockEl = document.getElementById('autoplay-block-explicit');
+                        var sourcesEl = document.getElementById('autoplay-sources');
+                        var expEl = document.getElementById('autoplay-exploration');
+
+                        var enabled = !!enabledEl?.checked;
+                        var mode = modeEl ? modeEl.value : 'smart';
+                        var exploration = expEl ? parseInt(expEl.value, 10) : 20;
+                        if (isNaN(exploration)) exploration = 20;
+                        var block_explicit = !!blockEl?.checked;
+                        var preferred_sources = sourcesEl ? sourcesEl.value : 'both';
+
+                        emitWithGuild('settings:autoplay', {
+                            enabled: enabled,
+                            mode: mode,
+                            exploration_rate: exploration,
+                            block_explicit: block_explicit,
+                            preferred_sources: preferred_sources
+                        }, function(res) {
+                            if (res && res.error) showToast(res.error, true);
+                            else showToast('Autoplay settings updated');
+                        });
+                    });
+                }
+
+                playPauseButtons.forEach(function(btn) {
+                    btn.addEventListener('click', function() { emitWithGuild('player:pause', {}); });
+                });
+                skipButtons.forEach(function(btn) {
+                    btn.addEventListener('click', function() { emitWithGuild('player:skip', {}); });
+                });
+                previousButtons.forEach(function(btn) {
+                    btn.addEventListener('click', function() { emitWithGuild('player:previous', {}); });
+                });
+
+                shuffleButtons.forEach(function(btn) {
+                    btn.addEventListener('click', function() { emitWithGuild('player:shuffle', {}); });
+                });
+                loopButtons.forEach(function(btn) {
+                    btn.addEventListener('click', function() { emitWithGuild('player:loop', {}); });
+                });
+                if (volumeSlider) {
+                    volumeSlider.addEventListener('input', function(e) {
+                        var v = parseInt(e.target.value, 10);
+                        if (isNaN(v)) return;
+                        var disp = document.getElementById('bar-volume-value');
+                        if (disp) disp.innerText = v + '%';
+                        emitWithGuild('player:volume', { volume: v });
+                    });
+                }
+
+                var progressBar = document.getElementById('bar-progress');
+                if (progressBar) {
+                    progressBar.addEventListener('input', function() {
+                        var cur = parseInt(this.value, 10);
+                        var dur = parseInt(this.max, 10) || 1;
+                        progressState.currentTime = isNaN(cur) ? 0 : cur;
+                        progressState.trackStartMs = Date.now();
+                        updateProgressUI(progressState.currentTime, dur);
+                    });
+                    progressBar.addEventListener('change', function() {
+                        var seconds = parseInt(this.value, 10);
+                        if (isNaN(seconds) || seconds < 0) return;
+                        progressState.currentTime = seconds;
+                        progressState.trackStartMs = Date.now();
+                        emitWithGuild('player:seek', { positionSeconds: seconds }, function(res) {
+                            if (res && res.error) showToast(res.error, true);
+                        });
+                    });
+                }
+                var mainProgressWrap = document.getElementById('main-progress-wrap');
+                if (mainProgressWrap) {
+                    mainProgressWrap.addEventListener('click', function(e) {
+                        var dur = progressState.duration;
+                        if (!dur || dur <= 0) return;
+                        var rect = this.getBoundingClientRect();
+                        var pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                        var seconds = Math.floor(pct * dur);
+                        progressState.currentTime = seconds;
+                        progressState.trackStartMs = Date.now();
+                        updateProgressUI(seconds, dur);
+                        if (progressBar) progressBar.value = seconds;
+                        emitWithGuild('player:seek', { positionSeconds: seconds }, function(res) {
+                            if (res && res.error) showToast(res.error, true);
+                        });
+                    });
+                }
+
+                var btnClearQueue = document.getElementById('btn-clear-queue');
+                if (btnClearQueue) {
+                    btnClearQueue.addEventListener('click', function() {
+                        emitWithGuild('player:clearQueue', {}, function(res) {
+                            if (res && res.error) showToast(res.error, true);
+                            else showToast('Queue cleared');
+                        });
+                    });
+                }
+
+                // Event delegation for dynamically rendered queue remove buttons
+                var queueList = document.getElementById('queue-list') || document.querySelector('[data-queue-container]');
+                if (queueList) {
+                    queueList.addEventListener('click', function(e) {
+                        var btn = e.target && (e.target.closest ? e.target.closest('.queue-remove-btn') : null);
+                        if (!btn) return;
+                        e.stopPropagation();
+                        var idx = parseInt(btn.getAttribute('data-queue-index'), 10);
+                        if (!isNaN(idx) && idx >= 0) emitWithGuild('player:removeTrack', { index: idx });
+                    });
+                }
+
+                var modal = document.getElementById('modal-select-server');
+                var listEl = document.getElementById('modal-guild-list');
+                var emptyEl = document.getElementById('modal-guild-empty');
+                var btnSelectServer = document.getElementById('btn-select-server');
+                if (btnSelectServer) {
+                    btnSelectServer.addEventListener('click', function() {
+                        socket.emit('get-guilds');
+                        if (modal) modal.classList.remove('hidden');
+                    });
+                }
+                socket.on('receive-guilds', function(guilds) {
+                    if (!listEl) return;
+                    listEl.innerHTML = '';
+                    if (!guilds || guilds.length === 0) {
+                        if (emptyEl) { emptyEl.classList.remove('hidden'); }
+                    } else {
+                        if (emptyEl) emptyEl.classList.add('hidden');
+                        guilds.forEach(function(g) {
+                            var li = document.createElement('li');
+                            li.className = 'p-3 rounded-lg hover:bg-gray-800 cursor-pointer flex items-center gap-3';
+                            li.innerHTML = '<span class="font-medium">' + (g.name || 'Server') + '</span>';
+                            li.dataset.guildId = g.id;
+                            li.addEventListener('click', function() {
+                                window.location.href = '/dashboard?guild_id=' + encodeURIComponent(g.id);
+                            });
+                            listEl.appendChild(li);
+                        });
+                    }
+                });
+                var modalClose = document.getElementById('modal-close');
+                if (modalClose) modalClose.addEventListener('click', function() {
+                    if (modal) modal.classList.add('hidden');
+                });
+                if (modal) {
+                    modal.addEventListener('click', function(e) {
+                        if (e.target === modal) modal.classList.add('hidden');
+                    });
+                }
+
+                document.querySelectorAll('.sidebar-item[data-view]').forEach(function(item) {
+                    item.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        var view = item.getAttribute('data-view');
+                        document.querySelectorAll('.sidebar-item').forEach(function(s) { s.classList.remove('active'); });
+                        item.classList.add('active');
+                        document.querySelectorAll('[id^="view-"]').forEach(function(v) {
+                            if (v.id === 'view-' + view) v.classList.remove('hidden');
+                            else v.classList.add('hidden');
+                        });
+                    });
+                });
+
+                var modalPlaylist = document.getElementById('modal-playlist');
+                var modalPlaylistTitle = document.getElementById('modal-playlist-title');
+                var modalPlaylistTracks = document.getElementById('modal-playlist-tracks');
+                var modalPlaylistPlayAll = document.getElementById('modal-playlist-play-all');
+                var modalPlaylistClose = document.getElementById('modal-playlist-close');
+                var currentModalPlaylistName = '';
+
+                document.querySelectorAll('.playlist-card').forEach(function(card) {
+                    card.addEventListener('click', function() {
+                        var playlist = card.getAttribute('data-playlist');
+                        if (!socket || !playlist) return;
+                        if (!guildId) { showToast('Select a server first.', true); return; }
+                        currentModalPlaylistName = playlist;
+                        var titleMap = { electro: 'Electro Mix', rock: 'Rock Mix' };
+                        if (modalPlaylistTitle) modalPlaylistTitle.textContent = titleMap[playlist] || playlist;
+                        if (modalPlaylistTracks) modalPlaylistTracks.innerHTML = '<div class="text-center py-8 text-gray-400"><i class="fas fa-spinner fa-spin mr-2"></i>Loading tracks...</div>';
+                        if (modalPlaylist) modalPlaylist.classList.remove('hidden');
+                        socket.emit('get-playlist-tracks', { name: playlist }, function(res) {
+                            var tracks = (res && res.tracks) ? res.tracks : [];
+                            if (!modalPlaylistTracks) return;
+                            if (tracks.length === 0) {
+                                modalPlaylistTracks.innerHTML = '<div class="text-center py-8 text-gray-500">No tracks in this playlist.</div>';
+                            } else {
+                                modalPlaylistTracks.innerHTML = tracks.map(function(t, i) {
+                                    var art = (t && (t.albumArt || t.thumbnail)) || '';
+                                    return '<div class="flex items-center gap-4 p-3 rounded-lg hover:bg-gray-800 transition">' +
+                                        '<span class="text-gray-500 w-6">' + (i + 1) + '</span>' +
+                                        '<img src="' + art + '" class="w-12 h-12 rounded object-cover" alt="" onerror="this.onerror=null;this.src=window.DASHBOARD_DEFAULT_ART||\'\';">' +
+                                        '<div class="flex-1 min-w-0"><p class="font-medium truncate">' + (t.title || '') + '</p><p class="text-sm text-gray-400 truncate">' + (t.artist || '') + '</p></div>' +
+                                        '<span class="text-sm text-gray-400">' + fmtTime(t.duration) + '</span>' +
+                                        '<button type="button" class="playlist-track-play px-3 py-1 rounded bg-gray-700 hover:bg-accent-purple transition" data-url="' + (t.url || '').replace(/"/g, '&quot;') + '" title="Play"><i class="fas fa-play"></i></button>' +
+                                        '</div>';
+                                }).join('');
+                                document.querySelectorAll('.playlist-track-play').forEach(function(btn) {
+                                    btn.addEventListener('click', function(e) {
+                                        e.stopPropagation();
+                                        var url = btn.getAttribute('data-url');
+                                        if (!url) return;
+                                        socket.emit('play-track', { guildId: guildId, url: url }, function(res) {
+                                            if (res && res.error) showToast(res.error, true);
+                                            else { showToast('Playing: ' + (res && res.track ? res.track : 'track')); if (modalPlaylist) modalPlaylist.classList.add('hidden'); }
+                                        });
+                                    });
+                                });
+                            }
+                        });
+                    });
+                });
+                if (modalPlaylistPlayAll) {
+                    modalPlaylistPlayAll.addEventListener('click', function() {
+                        if (!currentModalPlaylistName || !socket || !guildId) return;
+                        socket.emit('play-playlist', { guildId: guildId, name: currentModalPlaylistName }, function(res) {
+                            if (res && res.error) showToast(res.error, true);
+                            else {
+                                showToast('Playing playlist (' + (res && res.count ? res.count : 0) + ' tracks)');
+                                if (modalPlaylist) modalPlaylist.classList.add('hidden');
+                                document.querySelector('.sidebar-item[data-view="queue"]').click();
+                            }
+                        });
+                    });
+                }
+                if (modalPlaylistClose) modalPlaylistClose.addEventListener('click', function() { if (modalPlaylist) modalPlaylist.classList.add('hidden'); });
+                if (modalPlaylist) modalPlaylist.addEventListener('click', function(e) { if (e.target === modalPlaylist) modalPlaylist.classList.add('hidden'); });
+
+                var searchInput = document.getElementById('search-input');
+                var searchBtn = document.getElementById('search-btn');
+                var searchResults = document.getElementById('search-results');
+                var searchLoading = document.getElementById('search-loading');
+                var searchEmpty = document.getElementById('search-empty');
+
+                function performSearch() {
+                    var query = searchInput.value.trim();
+                    if (!query || !socket || !guildId) return;
+                    
+                    searchResults.innerHTML = '';
+                    searchEmpty.classList.add('hidden');
+                    searchLoading.classList.remove('hidden');
+                    
+                    socket.emit('search', { query: query }, function(res) {
+                        searchLoading.classList.add('hidden');
+                        if (res && res.error) {
+                            showToast(res.error, true);
+                            return;
+                        }
+                        if (!res || !res.results || res.results.length === 0) {
+                            searchEmpty.classList.remove('hidden');
+                            return;
+                        }
+                        
+                        searchResults.innerHTML = res.results.map(function(t) {
+                            return '<div class="bg-gray-900 rounded-lg p-4 flex items-center gap-4 hover:bg-gray-800 transition">' +
+                                '<img src="' + ((t && (t.albumArt || t.thumbnail)) || '') + '" class="w-16 h-16 rounded object-cover" alt="" onerror="this.onerror=null;this.src=window.DASHBOARD_DEFAULT_ART||\'\';">' +
+                                '<div class="flex-1 min-w-0">' +
+                                '<p class="font-medium truncate">' + (t.title || '') + '</p>' +
+                                '<p class="text-sm text-gray-400 truncate">' + (t.artist || '') + '</p>' +
+                                '</div>' +
+                                '<div class="text-right text-sm text-gray-400">' + fmtTime(t.duration) + '</div>' +
+                                '<button class="px-4 py-2 bg-accent-purple hover-accent-purple rounded-lg btn-play-result" data-url="' + (t.url || '') + '">' +
+                                '<i class="fas fa-play"></i>' +
+                                '</button>' +
+                                '</div>';
+                        }).join('');
+                        
+                        document.querySelectorAll('.btn-play-result').forEach(function(btn) {
+                            btn.addEventListener('click', function() {
+                                var url = btn.getAttribute('data-url');
+                                if (!url) return;
+                                socket.emit('play-track', { guildId: guildId, url: url }, function(res) {
+                                    if (res && res.error) showToast(res.error, true);
+                                    else { showToast('Now playing: ' + (res && res.track ? res.track : 'track')); document.querySelector('.sidebar-item[data-view="queue"]').click(); }
+                                });
+                            });
+                        });
+                    });
+                }
+                
+                if (searchBtn) searchBtn.addEventListener('click', performSearch);
+                if (searchInput) {
+                    searchInput.addEventListener('keypress', function(e) {
+                        if (e.key === 'Enter') performSearch();
+                    });
+                }
+
+            });
+        })();
+    </script>
+    
+</body>
+</html>

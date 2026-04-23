@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Bot - Login</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <style>
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0f0f11 0%, #18181b 50%, #27272a 100%);
+            min-height: 100vh;
+        }
+        
+        .gradient-text {
+            background: linear-gradient(135deg, #d946ef 0%, #a855f7 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .glow-button {
+            box-shadow: 0 0 30px rgba(217, 70, 239, 0.5);
+            transition: all 0.3s ease;
+        }
+        
+        .glow-button:hover {
+            box-shadow: 0 0 50px rgba(217, 70, 239, 0.8);
+            transform: translateY(-2px);
+        }
+        
+        .feature-card {
+            background: rgba(39, 39, 42, 0.5);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(217, 70, 239, 0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .feature-card:hover {
+            border-color: rgba(217, 70, 239, 0.5);
+            transform: translateY(-5px);
+        }
+        
+        .animated-bg {
+            animation: gradient 15s ease infinite;
+            background: linear-gradient(-45deg, #0f0f11, #18181b, #27272a, #0f0f11);
+            background-size: 400% 400%;
+        }
+        
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+    </style>
+</head>
+<body class="animated-bg">
+    
+    <div class="min-h-screen flex flex-col items-center justify-center px-4">
+        
+        <!-- Hero Section -->
+        <div class="text-center max-w-4xl mx-auto">
+            
+            <!-- Logo -->
+            <div class="mb-8">
+                <i class="fas fa-music text-6xl gradient-text"></i>
+            </div>
+            
+            <!-- Title -->
+            <h1 class="text-6xl md:text-7xl font-black text-white mb-6">
+                Music Bot
+                <span class="gradient-text">Dashboard</span>
+            </h1>
+            
+            <p class="text-xl md:text-2xl text-gray-400 mb-12 max-w-2xl mx-auto">
+                Control your Discord music experience with a beautiful, modern interface. 
+                Play, pause, skip, and manage your queue with ease.
+            </p>
+            
+            <!-- Login Button -->
+            <a href="/login" class="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white text-lg font-semibold rounded-full glow-button">
+                <i class="fab fa-discord text-2xl"></i>
+                Login with Discord
+            </a>
+            
+        </div>
+        
+        <!-- Features -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto mt-20">
+            
+            <div class="feature-card p-6 rounded-2xl text-center">
+                <div class="w-16 h-16 bg-gradient-to-br from-purple-600 to-fuchsia-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i class="fas fa-list text-2xl text-white"></i>
+                </div>
+                <h3 class="text-xl font-bold text-white mb-2">Queue Management</h3>
+                <p class="text-gray-400">View and manage your music queue in real-time with drag-and-drop support.</p>
+            </div>
+            
+            <div class="feature-card p-6 rounded-2xl text-center">
+                <div class="w-16 h-16 bg-gradient-to-br from-purple-600 to-fuchsia-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i class="fas fa-sliders-h text-2xl text-white"></i>
+                </div>
+                <h3 class="text-xl font-bold text-white mb-2">Full Control</h3>
+                <p class="text-gray-400">Control playback, volume, loop mode, and shuffle from anywhere.</p>
+            </div>
+            
+            <div class="feature-card p-6 rounded-2xl text-center">
+                <div class="w-16 h-16 bg-gradient-to-br from-purple-600 to-fuchsia-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i class="fas fa-heart text-2xl text-white"></i>
+                </div>
+                <h3 class="text-xl font-bold text-white mb-2">Playlists</h3>
+                <p class="text-gray-400">Create and save your favorite playlists for quick access anytime.</p>
+            </div>
+            
+        </div>
+        
+        <!-- Footer -->
+        <footer class="mt-20 text-center text-gray-500 text-sm">
+            <p>&copy; 2026 Music Bot Dashboard. Powered by Discord.js</p>
+        </footer>
+        
+    </div>
+    
+</body>
+</html>
